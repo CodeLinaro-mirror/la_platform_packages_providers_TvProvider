@@ -24,4 +24,8 @@ class TvProviderForTesting extends TvProvider {
     String getCallingPackage_() {
         return getContext().getPackageName();
     }
+
+    void setTransientRowHelper(TransientRowHelper helper) {
+        mTransientRowHelper = helper;
+    }
 }
