@@ -199,6 +199,8 @@ public class TvProvider extends ContentProvider {
                 CHANNELS_TABLE + "." + Channels.COLUMN_VERSION_NUMBER);
         sChannelProjectionMap.put(Channels.COLUMN_TRANSIENT,
                 CHANNELS_TABLE + "." + Channels.COLUMN_TRANSIENT);
+        sChannelProjectionMap.put(Channels.COLUMN_SYSTEM_APPROVED,
+                CHANNELS_TABLE + "." + Channels.COLUMN_SYSTEM_APPROVED);
 
         sProgramProjectionMap = new HashMap<>();
         sProgramProjectionMap.put(Programs._ID, Programs._ID);
@@ -251,13 +253,13 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_INTERNAL_PROVIDER_ID);
         sProgramProjectionMap.put(Programs.COLUMN_PREVIEW_VIDEO_URI,
                 Programs.COLUMN_PREVIEW_VIDEO_URI);
-        sProgramProjectionMap.put(Programs.COLUMN_PREVIEW_LAST_PLAYBACK_POSITION,
-                Programs.COLUMN_PREVIEW_LAST_PLAYBACK_POSITION);
-        sProgramProjectionMap.put(Programs.COLUMN_PREVIEW_DURATION,
-                Programs.COLUMN_PREVIEW_DURATION);
-        sProgramProjectionMap.put(Programs.COLUMN_PREVIEW_INTENT_URI,
-                Programs.COLUMN_PREVIEW_INTENT_URI);
-        sProgramProjectionMap.put(Programs.COLUMN_PREVIEW_WEIGHT, Programs.COLUMN_PREVIEW_WEIGHT);
+        sProgramProjectionMap.put(Programs.COLUMN_LAST_PLAYBACK_POSITION_MILLIS,
+                Programs.COLUMN_LAST_PLAYBACK_POSITION_MILLIS);
+        sProgramProjectionMap.put(Programs.COLUMN_DURATION_MILLIS,
+                Programs.COLUMN_DURATION_MILLIS);
+        sProgramProjectionMap.put(Programs.COLUMN_APP_LINK_INTENT_URI,
+                Programs.COLUMN_APP_LINK_INTENT_URI);
+        sProgramProjectionMap.put(Programs.COLUMN_WEIGHT, Programs.COLUMN_WEIGHT);
         sProgramProjectionMap.put(Programs.COLUMN_TRANSIENT, Programs.COLUMN_TRANSIENT);
         sProgramProjectionMap.put(Programs.COLUMN_TYPE, Programs.COLUMN_TYPE);
         sProgramProjectionMap.put(Programs.COLUMN_WATCH_NEXT_TYPE, Programs.COLUMN_WATCH_NEXT_TYPE);
@@ -265,7 +267,7 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_POSTER_ART_ASPECT_RATIO);
         sProgramProjectionMap.put(Programs.COLUMN_THUMBNAIL_ASPECT_RATIO,
                 Programs.COLUMN_THUMBNAIL_ASPECT_RATIO);
-        sProgramProjectionMap.put(Programs.COLUMN_LOGO, Programs.COLUMN_LOGO);
+        sProgramProjectionMap.put(Programs.COLUMN_LOGO_URI, Programs.COLUMN_LOGO_URI);
         sProgramProjectionMap.put(Programs.COLUMN_AVAILABILITY, Programs.COLUMN_AVAILABILITY);
         sProgramProjectionMap.put(Programs.COLUMN_STARTING_PRICE, Programs.COLUMN_STARTING_PRICE);
         sProgramProjectionMap.put(Programs.COLUMN_OFFER_PRICE, Programs.COLUMN_OFFER_PRICE);
@@ -475,6 +477,7 @@ public class TvProvider extends ContentProvider {
                     + CHANNELS_COLUMN_LOGO + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER,"
                     + Channels.COLUMN_TRANSIENT + " INTEGER NOT NULL DEFAULT 0,"
+                    + Channels.COLUMN_SYSTEM_APPROVED + " INTEGER NOT NULL DEFAULT 0,"
                     // Needed for foreign keys in other tables.
                     + "UNIQUE(" + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME + ")"
                     + ");");
@@ -509,16 +512,16 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_VERSION_NUMBER + " INTEGER,"
                     + Programs.COLUMN_INTERNAL_PROVIDER_ID + " TEXT,"
                     + Programs.COLUMN_PREVIEW_VIDEO_URI + " TEXT,"
-                    + Programs.COLUMN_PREVIEW_LAST_PLAYBACK_POSITION + " INTEGER,"
-                    + Programs.COLUMN_PREVIEW_DURATION + " INTEGER,"
-                    + Programs.COLUMN_PREVIEW_INTENT_URI + " TEXT,"
-                    + Programs.COLUMN_PREVIEW_WEIGHT + " INTEGER,"
+                    + Programs.COLUMN_LAST_PLAYBACK_POSITION_MILLIS + " INTEGER,"
+                    + Programs.COLUMN_DURATION_MILLIS + " INTEGER,"
+                    + Programs.COLUMN_APP_LINK_INTENT_URI + " TEXT,"
+                    + Programs.COLUMN_WEIGHT + " INTEGER,"
                     + Programs.COLUMN_TRANSIENT + " INTEGER NOT NULL DEFAULT 0,"
                     + Programs.COLUMN_TYPE + " TEXT,"
                     + Programs.COLUMN_WATCH_NEXT_TYPE + " TEXT,"
                     + Programs.COLUMN_POSTER_ART_ASPECT_RATIO + " TEXT,"
                     + Programs.COLUMN_THUMBNAIL_ASPECT_RATIO + " TEXT,"
-                    + Programs.COLUMN_LOGO + " TEXT,"
+                    + Programs.COLUMN_LOGO_URI + " TEXT,"
                     + Programs.COLUMN_AVAILABILITY + " TEXT,"
                     + Programs.COLUMN_STARTING_PRICE + " TEXT,"
                     + Programs.COLUMN_OFFER_PRICE + " TEXT,"
@@ -650,13 +653,13 @@ public class TvProvider extends ContentProvider {
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
                         + Programs.COLUMN_PREVIEW_VIDEO_URI + " TEXT;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
-                        + Programs.COLUMN_PREVIEW_LAST_PLAYBACK_POSITION + " INTEGER;");
+                        + Programs.COLUMN_LAST_PLAYBACK_POSITION_MILLIS + " INTEGER;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
-                        + Programs.COLUMN_PREVIEW_DURATION + " INTEGER;");
+                        + Programs.COLUMN_DURATION_MILLIS + " INTEGER;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
-                        + Programs.COLUMN_PREVIEW_INTENT_URI + " TEXT;");
+                        + Programs.COLUMN_APP_LINK_INTENT_URI + " TEXT;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
-                        + Programs.COLUMN_PREVIEW_WEIGHT + " INTEGER;");
+                        + Programs.COLUMN_WEIGHT + " INTEGER;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
                         + Programs.COLUMN_TRANSIENT + " INTEGER NOT NULL DEFAULT 0;");
                 oldVersion = 32;
@@ -671,7 +674,7 @@ public class TvProvider extends ContentProvider {
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
                         + Programs.COLUMN_THUMBNAIL_ASPECT_RATIO + " TEXT;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
-                        + Programs.COLUMN_LOGO + " TEXT;");
+                        + Programs.COLUMN_LOGO_URI + " TEXT;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
                         + Programs.COLUMN_AVAILABILITY + " TEXT;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
@@ -694,6 +697,8 @@ public class TvProvider extends ContentProvider {
                         + Programs.COLUMN_REVIEW_RATING_STYLE + " TEXT;");
                 db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
                         + Programs.COLUMN_REVIEW_RATING + " TEXT;");
+                db.execSQL("ALTER TABLE " + CHANNELS_TABLE + " ADD "
+                        + Channels.COLUMN_SYSTEM_APPROVED + " INTEGER NOT NULL DEFAULT 0;");
                 oldVersion = 33;
             }
             Log.i(TAG, "Upgrading from version " + oldVersion + " to " + newVersion + " is done.");
@@ -878,6 +883,7 @@ public class TvProvider extends ContentProvider {
     private Uri insertChannel(Uri uri, ContentValues values) {
         // Mark the owner package of this channel.
         values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage_());
+        blockIllegalAccessToSystemColumns(values);
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         long rowId = db.insert(CHANNELS_TABLE, null, values);
@@ -997,10 +1003,7 @@ public class TvProvider extends ContentProvider {
         mTransientRowHelper.ensureOldTransientRowsDeleted();
         SqlParams params = createSqlParams(OP_UPDATE, uri, selection, selectionArgs);
         if (params.getTables().equals(CHANNELS_TABLE)) {
-            if (values.containsKey(Channels.COLUMN_LOCKED)
-                    && !callerHasModifyParentalControlsPermission()) {
-                throw new SecurityException("Not allowed to modify Channels.COLUMN_LOCKED");
-            }
+            blockIllegalAccessToSystemColumns(values);
         } else if (params.getTables().equals(PROGRAMS_TABLE)) {
             checkAndConvertGenre(values);
             checkAndConvertDeprecatedColumns(values);
@@ -1274,6 +1277,28 @@ public class TvProvider extends ContentProvider {
         return getContext().checkCallingOrSelfPermission(
                 android.Manifest.permission.MODIFY_PARENTAL_CONTROLS)
                 == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void blockIllegalAccessToSystemColumns(ContentValues values) {
+        if (values.containsKey(Channels.COLUMN_LOCKED)
+                && !callerHasModifyParentalControlsPermission()) {
+            throw new SecurityException("Not allowed to access Channels.COLUMN_LOCKED");
+        }
+        Boolean hasAccessAllEpgDataPermission = null;
+        if (values.containsKey(Channels.COLUMN_BROWSABLE)) {
+            hasAccessAllEpgDataPermission = callerHasAccessAllEpgDataPermission();
+            if (!hasAccessAllEpgDataPermission) {
+                throw new SecurityException("Not allowed to access Channels.COLUMN_BROWSABLE");
+            }
+        }
+        if (values.containsKey(Channels.COLUMN_SYSTEM_APPROVED)) {
+            if (hasAccessAllEpgDataPermission == null) {
+                hasAccessAllEpgDataPermission = callerHasAccessAllEpgDataPermission();
+            }
+            if (!hasAccessAllEpgDataPermission) {
+                throw new SecurityException("Not allowed to access Channels.COLUMN_SYSTEM_APPROVED");
+            }
+        }
     }
 
     @Override
