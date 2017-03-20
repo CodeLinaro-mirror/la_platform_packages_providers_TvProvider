@@ -132,6 +132,8 @@ public class TvProvider extends ContentProvider {
     private static final String CHANNELS_COLUMN_LOGO = "logo";
     private static final int MAX_LOGO_IMAGE_SIZE = 256;
 
+    private static final String EMPTY_STRING = "";
+
     private static final long MAX_PROGRAM_DATA_DELAY_IN_MILLIS = 10 * 1000; // 10 seconds
 
     private static final Map<String, String> sChannelProjectionMap;
@@ -1227,6 +1229,12 @@ public class TvProvider extends ContentProvider {
         mTransientRowHelper.ensureOldTransientRowsDeleted();
         switch (sUriMatcher.match(uri)) {
             case MATCH_CHANNEL:
+                // Preview channels are not necessarily associated with TV input service.
+                // Therefore, we fill a fake ID to meet not null restriction for preview channels.
+                if (!values.containsKey(Channels.COLUMN_INPUT_ID)
+                        && Channels.TYPE_PREVIEW.equals(values.get(Channels.COLUMN_TYPE))) {
+                    values.put(Channels.COLUMN_INPUT_ID, EMPTY_STRING);
+                }
                 filterContentValues(values, sChannelProjectionMap);
                 return insertChannel(uri, values);
             case MATCH_PROGRAM:
@@ -1418,8 +1426,14 @@ public class TvProvider extends ContentProvider {
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
         mTransientRowHelper.ensureOldTransientRowsDeleted();
         SqlParams params = createSqlParams(OP_UPDATE, uri, selection, selectionArgs);
+        boolean containUnmodifiableColumn = false;
         if (params.getTables().equals(CHANNELS_TABLE)) {
             filterContentValues(values, sChannelProjectionMap);
+            containUnmodifiableColumn = disallowModifyChannelType(values, params);
+            if (containUnmodifiableColumn && Channels.CONTENT_URI.equals(uri)) {
+                Log.i(TAG, "Updating failed. Attempt to change unmodifiable column for channels.");
+                return 0;
+            }
             blockIllegalAccessToChannelsSystemColumns(values);
         } else if (params.getTables().equals(PROGRAMS_TABLE)) {
             filterContentValues(values, sProgramProjectionMap);
@@ -1430,6 +1444,12 @@ public class TvProvider extends ContentProvider {
             checkAndConvertGenre(values);
         } else if (params.getTables().equals(PREVIEW_PROGRAMS_TABLE)) {
             filterContentValues(values, sPreviewProgramProjectionMap);
+            containUnmodifiableColumn = disallowModifyChannelId(values, params);
+            if (containUnmodifiableColumn && PreviewPrograms.CONTENT_URI.equals(uri)) {
+                Log.i(TAG, "Updating failed. Attempt to change unmodifiable column for "
+                        + "preview programs.");
+                return 0;
+            }
             blockIllegalAccessToPreviewProgramsSystemColumns(values);
         } else if (params.getTables().equals(WATCH_NEXT_PROGRAMS_TABLE)) {
             filterContentValues(values, sWatchNextProgramProjectionMap);
@@ -1444,6 +1464,9 @@ public class TvProvider extends ContentProvider {
                 params.getSelectionArgs());
         if (count > 0) {
             notifyChange(uri);
+        } else if (containUnmodifiableColumn) {
+            Log.i(TAG, "Updating failed. The item may not exist or attempt to change "
+                    + "unmodifiable column.");
         }
         return count;
     }
@@ -1794,6 +1817,24 @@ public class TvProvider extends ContentProvider {
                 && !callerHasAccessAllEpgDataPermission()) {
             throw new SecurityException("Not allowed to access Programs.COLUMN_BROWSABLE");
         }
+    }
+
+    private boolean disallowModifyChannelType(ContentValues values, SqlParams params) {
+        if (values.containsKey(Channels.COLUMN_TYPE)) {
+            params.appendWhere(Channels.COLUMN_TYPE + "=?",
+                    values.getAsString(Channels.COLUMN_TYPE));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean disallowModifyChannelId(ContentValues values, SqlParams params) {
+        if (values.containsKey(PreviewPrograms.COLUMN_CHANNEL_ID)) {
+            params.appendWhere(PreviewPrograms.COLUMN_CHANNEL_ID + "=?",
+                    values.getAsString(PreviewPrograms.COLUMN_CHANNEL_ID));
+            return true;
+        }
+        return false;
     }
 
     @Override
