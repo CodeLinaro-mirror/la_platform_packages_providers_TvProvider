@@ -15,7 +15,8 @@
  limitations under the License.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.android.providers.tv" >
+    package="com.android.providers.tv"
+    android:sharedUserId="android.uid.system">
 
     <!-- Allows an application to read (but not write) all the TV listings.
          This is the only (soon-to-be) public permission among other permissions defined here.
@@ -93,6 +94,7 @@
         <receiver android:name="PackageRemovedReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.PACKAGE_FULLY_REMOVED"/>
+                <data android:scheme="package"/>
             </intent-filter>
         </receiver>
     </application>
