@@ -26,6 +26,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.OperationApplicationException;
+import android.content.SharedPreferences;
 import android.content.UriMatcher;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -52,6 +53,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.ParcelFileDescriptor.AutoCloseInputStream;
+import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Log;
@@ -71,6 +73,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * TV content provider. The contract between this provider and applications is defined in
@@ -81,6 +84,7 @@ public class TvProvider extends ContentProvider {
     private static final String TAG = "TvProvider";
 
     static final int DATABASE_VERSION = 33;
+    static final String SHARED_PREF_BLOCKED_PACKAGES_KEY = "blocked_packages";
     static final String CHANNELS_TABLE = "channels";
     static final String PREVIEW_PROGRAMS_TABLE = "preview_programs";
     static final String WATCH_NEXT_PROGRAMS_TABLE = "watch_next_programs";
@@ -218,8 +222,6 @@ public class TvProvider extends ContentProvider {
                 CHANNELS_TABLE + "." + Channels.COLUMN_VERSION_NUMBER);
         sChannelProjectionMap.put(Channels.COLUMN_TRANSIENT,
                 CHANNELS_TABLE + "." + Channels.COLUMN_TRANSIENT);
-        sChannelProjectionMap.put(Channels.COLUMN_SYSTEM_APPROVED,
-                CHANNELS_TABLE + "." + Channels.COLUMN_SYSTEM_APPROVED);
         sChannelProjectionMap.put(Channels.COLUMN_INTERNAL_PROVIDER_ID,
                 CHANNELS_TABLE + "." + Channels.COLUMN_INTERNAL_PROVIDER_ID);
 
@@ -270,6 +272,10 @@ public class TvProvider extends ContentProvider {
         sProgramProjectionMap.put(Programs.COLUMN_INTERNAL_PROVIDER_FLAG4,
                 Programs.COLUMN_INTERNAL_PROVIDER_FLAG4);
         sProgramProjectionMap.put(Programs.COLUMN_VERSION_NUMBER, Programs.COLUMN_VERSION_NUMBER);
+        sProgramProjectionMap.put(Programs.COLUMN_REVIEW_RATING_STYLE,
+                Programs.COLUMN_REVIEW_RATING_STYLE);
+        sProgramProjectionMap.put(Programs.COLUMN_REVIEW_RATING,
+                Programs.COLUMN_REVIEW_RATING);
 
         sWatchedProgramProjectionMap = new HashMap<>();
         sWatchedProgramProjectionMap.put(WatchedPrograms._ID, WatchedPrograms._ID);
@@ -358,6 +364,10 @@ public class TvProvider extends ContentProvider {
                 RecordedPrograms.COLUMN_INTERNAL_PROVIDER_FLAG4);
         sRecordedProgramProjectionMap.put(RecordedPrograms.COLUMN_VERSION_NUMBER,
                 RecordedPrograms.COLUMN_VERSION_NUMBER);
+        sRecordedProgramProjectionMap.put(RecordedPrograms.COLUMN_REVIEW_RATING_STYLE,
+                RecordedPrograms.COLUMN_REVIEW_RATING_STYLE);
+        sRecordedProgramProjectionMap.put(RecordedPrograms.COLUMN_REVIEW_RATING,
+                RecordedPrograms.COLUMN_REVIEW_RATING);
 
         sPreviewProgramProjectionMap = new HashMap<>();
         sPreviewProgramProjectionMap.put(PreviewPrograms._ID, PreviewPrograms._ID);
@@ -597,6 +607,8 @@ public class TvProvider extends ContentProvider {
             + RecordedPrograms.COLUMN_INTERNAL_PROVIDER_FLAG3 + " INTEGER,"
             + RecordedPrograms.COLUMN_INTERNAL_PROVIDER_FLAG4 + " INTEGER,"
             + RecordedPrograms.COLUMN_VERSION_NUMBER + " INTEGER,"
+            + RecordedPrograms.COLUMN_REVIEW_RATING_STYLE + " INTEGER,"
+            + RecordedPrograms.COLUMN_REVIEW_RATING + " TEXT,"
             + "FOREIGN KEY(" + RecordedPrograms.COLUMN_CHANNEL_ID + ") "
                     + "REFERENCES " + CHANNELS_TABLE + "(" + Channels._ID + ") "
                     + "ON UPDATE CASCADE ON DELETE SET NULL);";
@@ -720,6 +732,7 @@ public class TvProvider extends ContentProvider {
 
     static class DatabaseHelper extends SQLiteOpenHelper {
         private static DatabaseHelper sSingleton = null;
+        private static Context mContext;
 
         public static synchronized DatabaseHelper getInstance(Context context) {
             if (sSingleton == null) {
@@ -730,6 +743,7 @@ public class TvProvider extends ContentProvider {
 
         private DatabaseHelper(Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
+            mContext = context;
         }
 
         @Override
@@ -774,7 +788,6 @@ public class TvProvider extends ContentProvider {
                     + CHANNELS_COLUMN_LOGO + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER,"
                     + Channels.COLUMN_TRANSIENT + " INTEGER NOT NULL DEFAULT 0,"
-                    + Channels.COLUMN_SYSTEM_APPROVED + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_INTERNAL_PROVIDER_ID + " TEXT,"
                     // Needed for foreign keys in other tables.
                     + "UNIQUE(" + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME + ")"
@@ -807,6 +820,8 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_INTERNAL_PROVIDER_FLAG2 + " INTEGER,"
                     + Programs.COLUMN_INTERNAL_PROVIDER_FLAG3 + " INTEGER,"
                     + Programs.COLUMN_INTERNAL_PROVIDER_FLAG4 + " INTEGER,"
+                    + Programs.COLUMN_REVIEW_RATING_STYLE + " INTEGER,"
+                    + Programs.COLUMN_REVIEW_RATING + " TEXT,"
                     + Programs.COLUMN_VERSION_NUMBER + " INTEGER,"
                     + "FOREIGN KEY("
                             + Programs.COLUMN_CHANNEL_ID + "," + Programs.COLUMN_PACKAGE_NAME
@@ -929,9 +944,15 @@ public class TvProvider extends ContentProvider {
                 db.execSQL("ALTER TABLE " + CHANNELS_TABLE + " ADD "
                         + Channels.COLUMN_TRANSIENT + " INTEGER NOT NULL DEFAULT 0;");
                 db.execSQL("ALTER TABLE " + CHANNELS_TABLE + " ADD "
-                        + Channels.COLUMN_SYSTEM_APPROVED + " INTEGER NOT NULL DEFAULT 0;");
-                db.execSQL("ALTER TABLE " + CHANNELS_TABLE + " ADD "
                         + Channels.COLUMN_INTERNAL_PROVIDER_ID + " TEXT;");
+                db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
+                        + Programs.COLUMN_REVIEW_RATING_STYLE + " INTEGER;");
+                db.execSQL("ALTER TABLE " + PROGRAMS_TABLE + " ADD "
+                        + Programs.COLUMN_REVIEW_RATING + " TEXT;");
+                db.execSQL("ALTER TABLE " + RECORDED_PROGRAMS_TABLE + " ADD "
+                        + RecordedPrograms.COLUMN_REVIEW_RATING_STYLE + " INTEGER;");
+                db.execSQL("ALTER TABLE " + RECORDED_PROGRAMS_TABLE + " ADD "
+                        + RecordedPrograms.COLUMN_REVIEW_RATING + " TEXT;");
                 db.execSQL(CREATE_PREVIEW_PROGRAMS_TABLE_SQL);
                 db.execSQL(CREATE_PREVIEW_PROGRAMS_PACKAGE_NAME_INDEX_SQL);
                 db.execSQL(CREATE_PREVIEW_PROGRAMS_CHANNEL_ID_INDEX_SQL);
@@ -945,6 +966,13 @@ public class TvProvider extends ContentProvider {
         @Override
         public void onOpen(SQLiteDatabase db) {
             buildProjectionMap(db);
+            sBlockedPackagesSharedPreference = PreferenceManager.getDefaultSharedPreferences(
+                    mContext);
+            sBlockedPackages = new ConcurrentHashMap<>();
+            for (String packageName : sBlockedPackagesSharedPreference.getStringSet(
+                    SHARED_PREF_BLOCKED_PACKAGES_KEY, new HashSet<>())) {
+                sBlockedPackages.put(packageName, true);
+            }
         }
 
         private void buildProjectionMap(SQLiteDatabase db) {
@@ -978,6 +1006,8 @@ public class TvProvider extends ContentProvider {
     }
 
     private DatabaseHelper mOpenHelper;
+    private static SharedPreferences sBlockedPackagesSharedPreference;
+    private static Map<String, Boolean> sBlockedPackages;
     @VisibleForTesting
     protected TransientRowHelper mTransientRowHelper;
 
@@ -1166,6 +1196,63 @@ public class TvProvider extends ContentProvider {
                 } catch (SQLException e) {
                     return null;
                 }
+            case TvContract.METHOD_GET_BLOCKED_PACKAGES:
+                Bundle allBlockedPackages = new Bundle();
+                allBlockedPackages.putStringArray(TvContract.EXTRA_BLOCKED_PACKAGES,
+                        sBlockedPackages.keySet().toArray(new String[sBlockedPackages.size()]));
+                return allBlockedPackages;
+            case TvContract.METHOD_BLOCK_PACKAGE:
+                String packageNameToBlock = arg;
+                Bundle blockPackageResult = new Bundle();
+                if (!TextUtils.isEmpty(packageNameToBlock)) {
+                    sBlockedPackages.put(packageNameToBlock, true);
+                    if (sBlockedPackagesSharedPreference.edit().putStringSet(
+                            SHARED_PREF_BLOCKED_PACKAGES_KEY, sBlockedPackages.keySet()).commit()) {
+                        String[] channelSelectionArgs = new String[] {
+                                packageNameToBlock, Channels.TYPE_PREVIEW };
+                        delete(TvContract.Channels.CONTENT_URI,
+                                Channels.COLUMN_PACKAGE_NAME + "=? AND "
+                                        + Channels.COLUMN_TYPE + "=?",
+                                channelSelectionArgs);
+                        String[] programsSelectionArgs = new String[] {
+                                packageNameToBlock };
+                        delete(TvContract.PreviewPrograms.CONTENT_URI,
+                                PreviewPrograms.COLUMN_PACKAGE_NAME + "=?", programsSelectionArgs);
+                        delete(TvContract.WatchNextPrograms.CONTENT_URI,
+                                WatchNextPrograms.COLUMN_PACKAGE_NAME + "=?",
+                                programsSelectionArgs);
+                        blockPackageResult.putInt(
+                                TvContract.EXTRA_RESULT_CODE, TvContract.RESULT_OK);
+                    } else {
+                        Log.e(TAG, "Blocking package " + packageNameToBlock + " failed");
+                        sBlockedPackages.remove(packageNameToBlock);
+                        blockPackageResult.putInt(TvContract.EXTRA_RESULT_CODE, TvContract.RESULT_ERROR_IO);
+                    }
+                } else {
+                    blockPackageResult.putInt(
+                            TvContract.EXTRA_RESULT_CODE, TvContract.RESULT_ERROR_INVALID_ARGUMENT);
+                }
+                return blockPackageResult;
+            case TvContract.METHOD_UNBLOCK_PACKAGE:
+                String packageNameToUnblock = arg;
+                Bundle unblockPackageResult = new Bundle();
+                if (!TextUtils.isEmpty(packageNameToUnblock)) {
+                    sBlockedPackages.remove(packageNameToUnblock);
+                    if (sBlockedPackagesSharedPreference.edit().putStringSet(
+                            SHARED_PREF_BLOCKED_PACKAGES_KEY, sBlockedPackages.keySet()).commit()) {
+                        unblockPackageResult.putInt(
+                                TvContract.EXTRA_RESULT_CODE, TvContract.RESULT_OK);
+                    } else {
+                        Log.e(TAG, "Unblocking package " + packageNameToUnblock + " failed");
+                        sBlockedPackages.put(packageNameToUnblock, true);
+                        unblockPackageResult.putInt(
+                                TvContract.EXTRA_RESULT_CODE, TvContract.RESULT_ERROR_IO);
+                    }
+                } else {
+                    unblockPackageResult.putInt(
+                            TvContract.EXTRA_RESULT_CODE, TvContract.RESULT_ERROR_INVALID_ARGUMENT);
+                }
+                return unblockPackageResult;
         }
         return null;
     }
@@ -1265,6 +1352,9 @@ public class TvProvider extends ContentProvider {
     }
 
     private Uri insertChannel(Uri uri, ContentValues values) {
+        if (TextUtils.equals(values.getAsString(Channels.COLUMN_TYPE), Channels.TYPE_PREVIEW)) {
+            blockIllegalAccessFromBlockedPackage();
+        }
         // Mark the owner package of this channel.
         values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage_());
         blockIllegalAccessToChannelsSystemColumns(values);
@@ -1349,6 +1439,7 @@ public class TvProvider extends ContentProvider {
     }
 
     private Uri insertPreviewProgram(Uri uri, ContentValues values) {
+        blockIllegalAccessFromBlockedPackage();
         // Mark the owner package of this program.
         values.put(Programs.COLUMN_PACKAGE_NAME, getCallingPackage_());
         blockIllegalAccessToPreviewProgramsSystemColumns(values);
@@ -1365,6 +1456,7 @@ public class TvProvider extends ContentProvider {
     }
 
     private Uri insertWatchNextProgram(Uri uri, ContentValues values) {
+        blockIllegalAccessFromBlockedPackage();
         if (!callerHasAccessAllEpgDataPermission() ||
                 !values.containsKey(Programs.COLUMN_PACKAGE_NAME)) {
             // Mark the owner package of this program. System app with a proper permission may
@@ -1801,21 +1893,21 @@ public class TvProvider extends ContentProvider {
                 throw new SecurityException("Not allowed to access Channels.COLUMN_BROWSABLE");
             }
         }
-        if (values.containsKey(Channels.COLUMN_SYSTEM_APPROVED)) {
-            if (hasAccessAllEpgDataPermission == null) {
-                hasAccessAllEpgDataPermission = callerHasAccessAllEpgDataPermission();
-            }
-            if (!hasAccessAllEpgDataPermission) {
-                throw new SecurityException(
-                        "Not allowed to access Channels.COLUMN_SYSTEM_APPROVED");
-            }
-        }
     }
 
     private void blockIllegalAccessToPreviewProgramsSystemColumns(ContentValues values) {
         if (values.containsKey(PreviewPrograms.COLUMN_BROWSABLE)
                 && !callerHasAccessAllEpgDataPermission()) {
             throw new SecurityException("Not allowed to access Programs.COLUMN_BROWSABLE");
+        }
+    }
+
+    private void blockIllegalAccessFromBlockedPackage() {
+        String callingPackageName = getCallingPackage_();
+        if (sBlockedPackages.containsKey(callingPackageName)) {
+            throw new SecurityException(
+                    "Not allowed to access " + TvContract.AUTHORITY + ", "
+                    + callingPackageName + " is blocked");
         }
     }
 
